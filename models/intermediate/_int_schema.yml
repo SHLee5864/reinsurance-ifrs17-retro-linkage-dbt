@@ -1,0 +1,147 @@
+version: 2
+
+models:
+  - name: int_treaty_quarterly_movement
+    description: "Cashflow perspective, Treaty level. RAW cashflow with GoC mapping."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - treaty_id
+            - reporting_date
+            - aoc_step
+    columns:
+      - name: treaty_id
+        tests:
+          - not_null
+      - name: goc_id
+        tests:
+          - not_null
+      - name: reporting_date
+        tests:
+          - not_null
+      - name: aoc_step
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['INIT_RECOG', 'VARIANCE']
+      - name: amount
+        tests:
+          - not_null
+
+  - name: int_goc_quarterly_movement
+    description: "Cashflow perspective, GoC level. Treaty amounts aggregated to GoC."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - goc_id
+            - reporting_date
+            - aoc_step
+    columns:
+      - name: goc_id
+        tests:
+          - not_null
+      - name: aoc_step
+        tests:
+          - accepted_values:
+              values: ['INIT_RECOG', 'VARIANCE']
+      - name: amount
+        tests:
+          - not_null
+      - name: treaty_count
+        tests:
+          - not_null
+
+  - name: int_goc_bs_state
+    description: "BS perspective, GoC level. Core model — sequential profitability determination."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - goc_id
+            - reporting_date
+            - aoc_step
+    columns:
+      - name: goc_id
+        tests:
+          - not_null
+      - name: reporting_date
+        tests:
+          - not_null
+      - name: aoc_step
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['OPENING', 'INIT_RECOG', 'VARIANCE', 'CLOSING']
+      - name: aoc_order
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 5]
+      - name: cf_amount
+        tests:
+          - not_null
+      - name: cf_cumulative
+        tests:
+          - not_null
+
+  - name: int_treaty_bs_state
+    description: "BS perspective, Treaty level. GoC profitability pushed down + CSM Release."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - treaty_id
+            - reporting_date
+            - aoc_step
+    columns:
+      - name: treaty_id
+        tests:
+          - not_null
+      - name: aoc_step
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['OPENING', 'INIT_RECOG', 'VARIANCE', 'CSM_RELEASE', 'CLOSING']
+      - name: aoc_order
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5]
+
+  - name: int_retro_quarterly_movement
+    description: "Recovery calculation. Delta-based: only LC increases trigger recovery."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - retro_treaty_id
+            - assumed_treaty_id
+            - reporting_date
+            - aoc_step
+    columns:
+      - name: retro_treaty_id
+        tests:
+          - not_null
+      - name: assumed_treaty_id
+        tests:
+          - not_null
+      - name: lrc_amount
+        tests:
+          - not_null
+
+  - name: int_retro_bs_state
+    description: "BS perspective, Retro GoC level. Recovery as CSM/LC/LRC."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - retro_goc_id
+            - reporting_date
+            - aoc_step
+    columns:
+      - name: retro_goc_id
+        tests:
+          - not_null
+      - name: lrc_amount
+        tests:
+          - not_null
+      - name: profitability_state
+        tests:
+          - accepted_values:
+              values: ['PROFITABLE', 'ONEROUS', 'BREAK_EVEN']

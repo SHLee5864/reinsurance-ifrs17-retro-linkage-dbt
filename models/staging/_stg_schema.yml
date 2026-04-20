@@ -1,0 +1,100 @@
+version: 2
+
+models:
+  - name: stg_goc_master
+    description: "Staged GoC master. Type casting and value validation."
+    columns:
+      - name: goc_id
+        tests:
+          - not_null
+          - unique
+      - name: goc_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['ASSUMED', 'RETRO']
+      - name: expected_initial_state
+        tests:
+          - accepted_values:
+              values: ['PROFITABLE', 'ONEROUS']
+
+  - name: stg_treaty_master
+    description: "Staged treaty master. Type casting, FK validation, inception_quarter derived."
+    columns:
+      - name: treaty_id
+        tests:
+          - not_null
+          - unique
+      - name: treaty_type
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['ASSUMED', 'RETRO']
+      - name: goc_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_goc_master')
+              field: goc_id
+      - name: inception_date
+        tests:
+          - not_null
+      - name: inception_quarter
+        tests:
+          - accepted_values:
+              values: [1, 2, 3, 4]
+
+  - name: stg_retro_link
+    description: "Staged retro link. FK validation, rate range check."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - assumed_treaty_id
+            - retro_treaty_id
+    columns:
+      - name: assumed_treaty_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_treaty_master')
+              field: treaty_id
+      - name: retro_treaty_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_treaty_master')
+              field: treaty_id
+      - name: retro_cession_rate
+        tests:
+          - not_null
+
+  - name: stg_cashflow_input
+    description: "Staged cashflow input. Type casting, FK validation, reporting_quarter derived."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - treaty_id
+            - reporting_date
+            - aoc_step
+    columns:
+      - name: treaty_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_treaty_master')
+              field: treaty_id
+      - name: reporting_date
+        tests:
+          - not_null
+      - name: aoc_step
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['INIT_RECOG', 'VARIANCE']
+      - name: amount
+        tests:
+          - not_null
+      - name: reporting_quarter
+        tests:
+          - accepted_values:
+              values: [1, 2, 3, 4]

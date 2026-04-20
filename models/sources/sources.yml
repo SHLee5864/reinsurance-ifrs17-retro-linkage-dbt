@@ -1,0 +1,103 @@
+version: 2
+
+sources:
+  - name: raw_reinsurance
+    schema: reinsurance_ifrs17_raw
+    tables:
+      - name: goc_master
+        description: "IFRS 17 Group of Contracts definition. Assumed and Retro GoCs unified."
+        columns:
+          - name: goc_id
+            tests:
+              - not_null
+              - unique
+          - name: goc_type
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ['ASSUMED', 'RETRO']
+          - name: expected_initial_state
+            tests:
+              - accepted_values:
+                  values: ['PROFITABLE', 'ONEROUS']
+
+      - name: treaty_master
+        description: "Treaty-level contract definition. Assumed and Retro treaties unified."
+        columns:
+          - name: treaty_id
+            tests:
+              - not_null
+              - unique
+          - name: treaty_type
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ['ASSUMED', 'RETRO']
+          - name: goc_id
+            tests:
+              - not_null
+              - relationships:
+                  to: source('raw_reinsurance', 'goc_master')
+                  field: goc_id
+          - name: inception_date
+            tests:
+              - not_null
+
+      - name: retro_link
+        description: "Assumed-to-Retro treaty relationship with recovery cession rate."
+        tests:
+          - dbt_utils.unique_combination_of_columns:
+              combination_of_columns:
+                - assumed_treaty_id
+                - retro_treaty_id
+        columns:
+          - name: assumed_treaty_id
+            tests:
+              - not_null
+              - relationships:
+                  to: source('raw_reinsurance', 'treaty_master')
+                  field: treaty_id
+          - name: retro_treaty_id
+            tests:
+              - not_null
+              - relationships:
+                  to: source('raw_reinsurance', 'treaty_master')
+                  field: treaty_id
+          - name: retro_cession_rate
+            tests:
+              - not_null
+
+      - name: cashflow_input
+        description: "Quarterly cashflow input per treaty and AoC step. Signed, discounted PV."
+        tests:
+          - dbt_utils.unique_combination_of_columns:
+              combination_of_columns:
+                - treaty_id
+                - reporting_date
+                - aoc_step
+        columns:
+          - name: treaty_id
+            tests:
+              - not_null
+              - relationships:
+                  to: source('raw_reinsurance', 'treaty_master')
+                  field: treaty_id
+          - name: reporting_date
+            tests:
+              - not_null
+          - name: aoc_step
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ['INIT_RECOG', 'VARIANCE']
+          - name: amount
+            tests:
+              - not_null
+
+      - name: assumption_version
+        description: "Version governance metadata for data traceability."
+        columns:
+          - name: version_id
+            tests:
+              - not_null
+              - unique
