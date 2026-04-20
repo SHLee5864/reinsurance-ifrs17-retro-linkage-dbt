@@ -2,7 +2,7 @@ version: 2
 
 models:
   - name: mart_goc_aoc_quarterly
-    description: "GoC × quarter × AoC step BS & movement view (assumed + retro)"
+    description: "GoC × quarter × AoC step 상세. Assumed: CSM/LC + CSM_RELEASE. Retro: CSM/LC/LRC."
     columns:
       - name: goc_id
         tests: [not_null]
@@ -10,9 +10,13 @@ models:
         tests: [not_null]
       - name: aoc_step
         tests: [not_null]
+      - name: goc_type
+        tests:
+          - accepted_values:
+              values: ['ASSUMED', 'RETRO']
 
   - name: mart_treaty_aoc_quarterly
-    description: "Treaty × quarter × AoC step BS & movement view (CSM release 포함)"
+    description: "Treaty × quarter × AoC step 상세. CSM release 포함."
     columns:
       - name: treaty_id
         tests: [not_null]
@@ -22,13 +26,34 @@ models:
         tests: [not_null]
 
   - name: mart_goc_annual_summary
-    description: "GoC annual opening / movement / closing summary"
+    description: "GoC 연간 Opening / Movement / Closing. CSM/LC/LRC 포함."
+    columns:
+      - name: goc_id
+        tests: [not_null, unique]
+      - name: final_profitability
+        tests:
+          - accepted_values:
+              values: ['PROFITABLE', 'ONEROUS', 'BREAK_EVEN']
+
+  - name: mart_annual_aoc_detail
+    description: "GoC × AoC step 연간 합산. Delta 설명 및 항등식 검증용."
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - goc_id
+            - aoc_step
     columns:
       - name: goc_id
         tests: [not_null]
+      - name: aoc_step
+        tests: [not_null]
 
   - name: mart_pnl_quarterly
-    description: "Quarterly Gross / Ceded / Net P&L view (교육용 구조)"
+    description: "Quarterly Gross / Ceded / Net P&L. Revenue = CSM release, Expense = onerous loss, Recovery = retro LRC."
     columns:
       - name: reporting_date
+        tests: [not_null, unique]
+      - name: insurance_revenue_gross
+        tests: [not_null]
+      - name: recovery_ceded
         tests: [not_null]

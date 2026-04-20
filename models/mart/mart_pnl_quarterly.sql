@@ -1,65 +1,65 @@
--- models/mart_pnl_quarterly.sql
-with goc_bs as (
-    select
-        g.goc_id,
-        g.goc_type,                 -- assumed / retro
-        s.reporting_date,
-        s.aoc_step,
-        s.cf_amount,
-        case
-            when s.cf_cumulative > 0 then 'PROFITABLE'
-            when s.cf_cumulative < 0 then 'ONEROUS'
-            else 'BREAK_EVEN'
-        end as state
-    from {{ ref('int_goc_bs_state') }} s
-    left join {{ ref('stg_goc_master') }} g
-      on s.goc_id = g.goc_id
+-- mart_pnl_quarterly
+-- Quarterly Gross / Ceded / Net P&L view
+-- Insurance revenue = CSM release (assumed, treaty level aggregated)
+-- Insurance service expense = onerous loss (assumed VARIANCE, negative cf)
+-- Recovery = retro LRC amount
+
+{{ config(materialized='table') }}
+
+WITH -- Assumed: CSM release from treaty level
+csm_release AS (
+    SELECT
+        reporting_date,
+        reporting_quarter,
+        SUM(csm_amount) AS insurance_revenue_gross
+    FROM {{ ref('int_treaty_bs_state') }}
+    WHERE aoc_step = 'CSM_RELEASE'
+    GROUP BY reporting_date, reporting_quarter
 ),
 
-pnl as (
-    select
+-- Assumed: onerous loss (VARIANCE on onerous GoCs)
+service_expense AS (
+    SELECT
+        s.reporting_date,
+        s.reporting_quarter,
+        SUM(s.lc_amount) AS insurance_service_expense_gross
+    FROM {{ ref('int_goc_bs_state') }} s
+    WHERE s.aoc_step = 'VARIANCE'
+      AND s.lc_amount < 0
+    GROUP BY s.reporting_date, s.reporting_quarter
+),
+
+-- Retro: recovery (LRC)
+retro_recovery AS (
+    SELECT
         reporting_date,
-        goc_type,
-        sum(
-            case
-                when aoc_step = 'CSM_RELEASE'
-                     and goc_type = 'ASSUMED'
-                then cf_amount
-                else 0
-            end
-        ) as insurance_revenue_gross,
-        sum(
-            case
-                when aoc_step = 'VARIANCE'
-                     and state = 'ONEROUS'
-                     and goc_type = 'ASSUMED'
-                     and cf_amount < 0
-                then cf_amount
-                else 0
-            end
-        ) as insurance_service_expense_gross,
-        sum(
-            case
-                when aoc_step = 'CSM_RELEASE'
-                     and goc_type = 'RETRO'
-                then cf_amount
-                else 0
-            end
-        ) as recovery_ceded
-    from goc_bs
-    group by reporting_date, goc_type
+        reporting_quarter,
+        SUM(lrc_amount) AS recovery_ceded
+    FROM {{ ref('int_retro_bs_state') }}
+    GROUP BY reporting_date, reporting_quarter
+),
+
+-- All quarter-end dates
+quarters AS (
+    SELECT DISTINCT reporting_date, reporting_quarter
+    FROM {{ ref('int_goc_bs_state') }}
+    WHERE aoc_step = 'CLOSING'
 )
 
-select
-    reporting_date,
-    -- Gross (assumed)
-    max(case when goc_type = 'ASSUMED' then insurance_revenue_gross end)          as insurance_revenue_gross,
-    max(case when goc_type = 'ASSUMED' then insurance_service_expense_gross end)  as insurance_service_expense_gross,
-    -- Ceded (retro)
-    max(case when goc_type = 'RETRO' then recovery_ceded end)                     as recovery_ceded,
-    -- Net (simple combination)
-    max(case when goc_type = 'ASSUMED' then insurance_revenue_gross end)
-      + coalesce(max(case when goc_type = 'RETRO' then recovery_ceded end), 0)    as insurance_revenue_net
-from pnl
-group by reporting_date
-order by reporting_date
+SELECT
+    q.reporting_date,
+    q.reporting_quarter,
+    COALESCE(cr.insurance_revenue_gross, 0) AS insurance_revenue_gross,
+    COALESCE(se.insurance_service_expense_gross, 0) AS insurance_service_expense_gross,
+    COALESCE(rr.recovery_ceded, 0) AS recovery_ceded,
+    COALESCE(cr.insurance_revenue_gross, 0)
+        + COALESCE(se.insurance_service_expense_gross, 0)
+        + COALESCE(rr.recovery_ceded, 0) AS net_result
+FROM quarters q
+LEFT JOIN csm_release cr
+    ON q.reporting_date = cr.reporting_date
+LEFT JOIN service_expense se
+    ON q.reporting_date = se.reporting_date
+LEFT JOIN retro_recovery rr
+    ON q.reporting_date = rr.reporting_date
+ORDER BY q.reporting_date
