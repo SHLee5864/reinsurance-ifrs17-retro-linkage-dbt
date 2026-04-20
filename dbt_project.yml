@@ -1,0 +1,25 @@
+name: 'reinsurance_ifrs17'
+version: '1.0.0'
+config-version: 2
+
+profile: 'reinsurance_ifrs17'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+models:
+  reinsurance_ifrs17:
+    staging:
+      +materialized: view
+      +schema: stg
+    intermediate:
+      +materialized: view
+      +schema: int
+    validation:
+      +materialized: view
+      +schema: val
+    mart:
+      +materialized: table
+      +schema: mart
