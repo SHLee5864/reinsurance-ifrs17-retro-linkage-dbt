@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: mart_goc_aoc_quarterly
+    description: "GoC × quarter × AoC step BS & movement view (assumed + retro)"
+    columns:
+      - name: goc_id
+        tests: [not_null]
+      - name: reporting_date
+        tests: [not_null]
+      - name: aoc_step
+        tests: [not_null]
+
+  - name: mart_treaty_aoc_quarterly
+    description: "Treaty × quarter × AoC step BS & movement view (CSM release 포함)"
+    columns:
+      - name: treaty_id
+        tests: [not_null]
+      - name: reporting_date
+        tests: [not_null]
+      - name: aoc_step
+        tests: [not_null]
+
+  - name: mart_goc_annual_summary
+    description: "GoC annual opening / movement / closing summary"
+    columns:
+      - name: goc_id
+        tests: [not_null]
+
+  - name: mart_pnl_quarterly
+    description: "Quarterly Gross / Ceded / Net P&L view (교육용 구조)"
+    columns:
+      - name: reporting_date
+        tests: [not_null]

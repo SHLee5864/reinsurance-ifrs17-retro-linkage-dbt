@@ -1,0 +1,79 @@
+version: 2
+
+models:
+
+  # =========================================================
+  # L1 - Core invariants
+  # =========================================================
+
+  - name: val_bs_invariants
+    description: "L1 - Balance sheet invariants at CLOSING (CSM/LC mapping correctness)"
+    columns:
+      - name: goc_id
+        tests: [not_null]
+      - name: reporting_date
+        tests: [not_null]
+      - name: profitability_state
+      - name: csm_amount
+      - name: lc_amount
+
+  - name: val_profitability_consistency
+    description: "L1 - Profitability state consistency (CSM vs LC exclusivity rules)"
+    columns:
+      - name: goc_id
+        tests: [not_null]
+      - name: reporting_date
+        tests: [not_null]
+
+  - name: val_rollforward_continuity
+    description: "L1 - Rollforward continuity (OPENING = previous CLOSING)"
+    columns:
+      - name: goc_id
+        tests: [not_null]
+      - name: opening_csm
+      - name: prev_closing_csm
+
+
+  # =========================================================
+  # L2 - Cross entity consistency
+  # =========================================================
+
+  - name: val_retro_recovery_identity
+    description: "L2 - Retro recovery identity: LRC = |Assumed LC| × cession rate"
+    columns:
+      - name: retro_treaty_id
+      - name: assumed_treaty_id
+      - name: lrc_amount
+
+  - name: val_release_timing
+    description: "L2 - CSM release timing rules (eligibility + period constraints)"
+    columns:
+      - name: treaty_id
+        tests: [not_null]
+      - name: reporting_quarter
+
+  - name: val_treaty_goc_reconciliation
+    description: "L2 - Treaty vs GoC reconciliation check"
+    columns:
+      - name: goc_id
+        tests: [not_null]
+      - name: reporting_date
+
+  - name: val_retro_no_double_recovery
+    description: "L2 - Prevent double counting of retro recovery"
+    columns:
+      - name: retro_treaty_id
+      - name: total_recovery
+
+
+  # =========================================================
+  # L3 - Scenario validation
+  # =========================================================
+
+  - name: val_scenario_expectation
+    description: "L3 - Scenario design validation (expected vs actual outcomes)"
+    columns:
+      - name: goc_id
+        tests: [not_null]
+      - name: actual_final_state
+      - name: expected_initial_state
