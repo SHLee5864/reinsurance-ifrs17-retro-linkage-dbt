@@ -130,6 +130,9 @@ all_openings AS (
 ),
 
 -- ===== INIT_RECOG + VARIANCE rows =====
+-- CSM/LC allocation uses GoC-level ratio, not simple profitability flag.
+-- This ensures transition quarters (where CSM is exhausted or LC is reversed)
+-- are correctly reflected at treaty level.
 movement_rows AS (
     SELECT
         tc.treaty_id,
@@ -148,12 +151,16 @@ movement_rows AS (
             ELSE 0
         END AS treaty_csm_proxy,
         tc.amount AS cf_amount,
+        -- CSM/LC allocation: use GoC-level amounts × treaty weight
+        -- This handles transition quarters correctly (CSM exhaustion / LC reversal)
         CASE
-            WHEN gv.profitability_state = 'PROFITABLE' THEN -1 * tc.amount
+            WHEN gv_detail.goc_cf_amount != 0 THEN
+                gv_detail.goc_csm_amount * (tc.amount / gv_detail.goc_cf_amount)
             ELSE 0
         END AS csm_amount,
         CASE
-            WHEN gv.profitability_state IN ('ONEROUS', 'BREAK_EVEN') THEN tc.amount
+            WHEN gv_detail.goc_cf_amount != 0 THEN
+                gv_detail.goc_lc_amount * (tc.amount / gv_detail.goc_cf_amount)
             ELSE 0
         END AS lc_amount,
         gv.profitability_state
@@ -161,9 +168,25 @@ movement_rows AS (
     INNER JOIN goc_at_variance gv
         ON tc.goc_id = gv.goc_id
         AND tc.reporting_date = gv.reporting_date
+    INNER JOIN (
+        -- GoC-level CSM/LC amounts per aoc_step for ratio calculation
+        SELECT
+            goc_id,
+            reporting_date,
+            aoc_step,
+            cf_amount AS goc_cf_amount,
+            csm_amount AS goc_csm_amount,
+            lc_amount AS goc_lc_amount
+        FROM {{ ref('int_goc_bs_state') }}
+    ) gv_detail
+        ON tc.goc_id = gv_detail.goc_id
+        AND tc.reporting_date = gv_detail.reporting_date
+        AND tc.aoc_step = gv_detail.aoc_step
 ),
 
 -- ===== CSM_RELEASE rows (Q2, Q4 only) =====
+-- CSM release is based on OPENING CSM balance (pre-movement), not VARIANCE delta.
+-- Profitability check uses post-VARIANCE state (from movement_rows).
 csm_release_rows AS (
     SELECT
         m.treaty_id,
@@ -173,11 +196,11 @@ csm_release_rows AS (
         m.reporting_quarter,
         'CSM_RELEASE' AS aoc_step,
         4 AS aoc_order,
-        m.treaty_csm_proxy,
+        o.treaty_csm_proxy AS treaty_csm_proxy,
         CAST(0 AS DECIMAL(18,2)) AS cf_amount,
         CASE
-            WHEN m.profitability_state = 'PROFITABLE' AND m.treaty_csm_proxy < 0 THEN
-                ABS(m.treaty_csm_proxy) *
+            WHEN m.profitability_state = 'PROFITABLE' AND o.treaty_csm_proxy < 0 THEN
+                ABS(o.treaty_csm_proxy) *
                 CASE
                     WHEN m.reporting_quarter = 2 THEN {{ cu_h1_ratio }}
                     WHEN m.reporting_quarter = 4 THEN {{ cu_h2_ratio }}
@@ -187,6 +210,9 @@ csm_release_rows AS (
         CAST(0 AS DECIMAL(18,2)) AS lc_amount,
         m.profitability_state
     FROM movement_rows m
+    INNER JOIN all_openings o
+        ON m.treaty_id = o.treaty_id
+        AND m.reporting_date = o.reporting_date
     WHERE m.reporting_quarter IN ({{ release_quarters | join(',') }})
       AND m.aoc_step = 'VARIANCE'
 ),
